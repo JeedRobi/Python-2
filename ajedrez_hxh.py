@@ -138,7 +138,7 @@ class Torre(Pieza):
     negras = 0
     blancas = 0
 
-    def __init__(self, nombre: str, columna: str, fila: int, color: str, moved: bool) -> None:
+    def __init__(self, nombre: str, columna: str, fila: int, color: str, moved: bool = False) -> None:
         '''Método inicializador
         Args:
             nombre(str): 'TN' | 'TB'
@@ -148,7 +148,7 @@ class Torre(Pieza):
         '''
         super().__init__(nombre, columna, fila)
         self.color = color
-        self.moved = False
+        self.moved = moved
         if color == 'N':
             Torre.negras += 1
         else:
@@ -527,7 +527,7 @@ class King(Pieza):
     # atributos de clase
     negras = 0
     blancas = 0
-    def __init__(self, nombre: str, columna: str, fila: int, color: str, moved: bool) -> None:
+    def __init__(self, nombre: str, columna: str, fila: int, color: str, moved: bool = False) -> None:
         '''Método inicializador
         Args:
             nombre(str): 'KN' | 'KB'
@@ -537,7 +537,7 @@ class King(Pieza):
         '''
         super().__init__(nombre, columna, fila)
         self.color = color
-        self.moved = False
+        self.moved = moved
         if color == 'N':
             King.negras += 1
         else:
@@ -561,26 +561,36 @@ class King(Pieza):
         Verifica las condiciones para el enroque. Devuelve una lista de posiciones destino 
         normalizadas del rey si el enroque es posible en ese lado.
         """
+        movimientos_enroque = []
+
         if self.moved:
-            return False
+            return movimientos_enroque
         
         else:
             if self.color == 'N':
-                if (n_large_enroque := (Partida.tablero[7][1] is None and Partida.tablero[7][2] is None and Partida.tablero[7][3] is None)) or (n_short_enroque := (Partida.tablero[7][5] is None and Partida.tablero[7][6] is None)):
-                    if n_large_enroque:
-                        pass
-                    if n_short_enroque:
-                        pass
+                if (n_large_enroque := (Partida.tablero[0][1] is None and Partida.tablero[0][2] is None and Partida.tablero[0][3] is None)) or (n_short_enroque := (Partida.tablero[0][5] is None and Partida.tablero[0][6] is None)):
+                    if n_large_enroque and Partida.tablero[0][0] is not None:
+                        movimientos_enroque.append(King.posición_ajedrez(0, 2))
+                        return movimientos_enroque
+
+                    if n_short_enroque and Partida.tablero[0][7] is not None:
+                        movimientos_enroque.append(King.posición_ajedrez(0, 6))
+                        return movimientos_enroque
                 else:
-                    return False
+                    return movimientos_enroque
+                
             else:
-                if (b_large_enroque := (Partida.tablero[0][1] is None and Partida.tablero[0][2] is None and Partida.tablero[0][3] is None)) or (b_short_enroque := (Partida.tablero[0][5] is None and Partida.tablero[0][6] is None)):
-                    if b_large_enroque:
-                        pass
-                    if b_short_enroque:
-                        pass
+                if (b_large_enroque := (Partida.tablero[7][1] is None and Partida.tablero[7][2] is None and Partida.tablero[7][3] is None)) or (b_short_enroque := (Partida.tablero[7][5] is None and Partida.tablero[7][6] is None)):
+                    if b_large_enroque and Partida.tablero[7][0] is not None:
+                        movimientos_enroque.append(King.posición_ajedrez(7, 2))
+                        return movimientos_enroque
+                    
+                    if b_short_enroque and Partida.tablero[7][7] is not None:
+                        movimientos_enroque.append(King.posición_ajedrez(7, 6))
+                        return movimientos_enroque
                 else:
-                    return False
+                    return movimientos_enroque
+        return movimientos_enroque
     
     def mueve(self, nueva_pos:tuple):
         '''Mueve de forma válida el rey. Los turnos se gestionan desde el '__main__' junto con el objeto partida.
@@ -596,11 +606,17 @@ class King(Pieza):
             None|True: Si el movimiento no es válido retorna None | True si es válido
         '''
         destinos = King.posibles_movimientos(King.posicion_normalizada(self.fila, self.columna))
+        destinos_enroque = self.enroque()
+        destinos.extend(destinos_enroque)
         print(destinos)
 
         if nueva_pos in destinos:
             pos = King.busca_pieza_piezas(nueva_pos)
             
+            # Detectamos si es enroque si el destino está en la lista de enroques
+            if nueva_pos in destinos_enroque:
+                self._realizar_movimiento_torre_enroque(nueva_pos)
+
             if pos is not None:
                 Partida.piezas_muertas.append(Partida.piezas[pos].nombre)
                 Partida.piezas.pop(pos)
@@ -613,7 +629,36 @@ class King(Pieza):
         
         return None
 
- 
+    def _realizar_movimiento_torre_enroque(self, pos_rey_destino):
+        """Método auxiliar privado para mover la torre cuando el rey hace enroque"""
+        # Convertimos la posición destino del rey a índices para saber si es corto o largo
+        fila_rey, col_rey_str = pos_rey_destino
+            
+        # Mapeo inverso rápido para saber columna índice
+        col_map = {'C': 2, 'G': 6} 
+        col_idx = col_map.get(col_rey_str)
+            
+        # Definir fila índice
+        fila_idx = 0 if self.color == 'N' else 7
+
+        # Enroque CORTO (Rey va a la G / idx 6) -> Torre está en H (7) y va a F (5)
+        if col_idx == 6:
+            torre = Partida.tablero[fila_idx][7] # Torre original
+            if torre:
+                torre.columna = 'F' # Nueva columna
+                torre.fila = fila_rey 
+                torre.moved = True # Marcar torre como movida
+                print("--- Enroque Corto realizado ---")
+
+        # Enroque LARGO (Rey va a la C / idx 2) -> Torre está en A (0) y va a D (3)
+        elif col_idx == 2:
+            torre = Partida.tablero[fila_idx][0] # Torre original
+            if torre:
+                torre.columna = 'D' # Nueva columna
+                torre.fila = fila_rey
+                torre.moved = True
+                print("--- Enroque Largo realizado ---")
+
     @staticmethod
     def posibles_movimientos(pos_inicial:tuple):
         '''Trabajamos con tablero normalizado y devolvemos una lista con los movimientos válidos (en notación ajedrez).
